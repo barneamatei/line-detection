@@ -3,7 +3,6 @@
 #include <cmath>
 #include <vector>
 
-
 using namespace std;
 using namespace cv;
 
@@ -15,7 +14,7 @@ Mat createGaussianKernel(int ksize, double sigma) {
     for (int i = -half; i <= half; ++i) {
         for (int j = -half; j <= half; ++j) {
             double value = (1.0 / (2 * CV_PI * sigma * sigma)) *
-                std::exp(-(i * i + j * j) / (2 * sigma * sigma));
+                exp(-(i * i + j * j) / (2 * sigma * sigma));
             kernel.at<double>(i + half, j + half) = value;
             sum += value;
         }
@@ -30,13 +29,16 @@ Mat applyGaussianFilter(const Mat& src, const Mat& kernel) {
     int half = ksize / 2;
     Mat dst = Mat::zeros(src.size(), src.type());
 
-    for (int y = half; y < src.rows - half; ++y) {
-        for (int x = half; x < src.cols - half; ++x) {
+    Mat padded;
+    copyMakeBorder(src, padded, half, half, half, half, BORDER_REFLECT101);
+
+    for (int y = 0; y < src.rows; ++y) {
+        for (int x = 0; x < src.cols; ++x) {
             double sum = 0.0;
-            for (int ky = -half; ky <= half; ++ky) {
-                for (int kx = -half; kx <= half; ++kx) {
-                    uchar pixel = src.at<uchar>(y + ky, x + kx);
-                    double weight = kernel.at<double>(ky + half, kx + half);
+            for (int ky = 0; ky < ksize; ++ky) {
+                for (int kx = 0; kx < ksize; ++kx) {
+                    uchar pixel = padded.at<uchar>(y + ky, x + kx);
+                    double weight = kernel.at<double>(ky, kx);
                     sum += pixel * weight;
                 }
             }
@@ -46,6 +48,7 @@ Mat applyGaussianFilter(const Mat& src, const Mat& kernel) {
 
     return dst;
 }
+
 
 Mat computeGradient(const Mat& image) {
     int kx[3][3] = {
@@ -62,19 +65,22 @@ Mat computeGradient(const Mat& image) {
 
     Mat magnitude = Mat::zeros(image.size(), CV_64F);
 
-    for (int y = 1; y < image.rows - 1; ++y) {
-        for (int x = 1; x < image.cols - 1; ++x) {
+    Mat padded;
+    copyMakeBorder(image, padded, 1, 1, 1, 1, BORDER_REFLECT101);
+
+    for (int y = 0; y < image.rows; ++y) {
+        for (int x = 0; x < image.cols; ++x) {
             double gx = 0.0, gy = 0.0;
 
-            for (int i = -1; i <= 1; ++i) {
-                for (int j = -1; j <= 1; ++j) {
-                    uchar pixel = image.at<uchar>(y + i, x + j);
-                    gx += pixel * kx[i + 1][j + 1];
-                    gy += pixel * ky[i + 1][j + 1];
+            for (int i = 0; i < 3; ++i) {
+                for (int j = 0; j < 3; ++j) {
+                    uchar pixel = padded.at<uchar>(y + i, x + j);
+                    gx += pixel * kx[i][j];
+                    gy += pixel * ky[i][j];
                 }
             }
 
-            magnitude.at<double>(y, x) = std::sqrt(gx * gx + gy * gy);
+            magnitude.at<double>(y, x) = sqrt(gx * gx + gy * gy);
         }
     }
 
@@ -83,7 +89,7 @@ Mat computeGradient(const Mat& image) {
 
 
 Mat cannyEdgeDetection(const Mat& image, double lowThreshold, double highThreshold) {
-    Mat kernel = createGaussianKernel(5, 1.0);
+    Mat kernel = createGaussianKernel(7, 2.5);
     Mat blurred = applyGaussianFilter(image, kernel);
 
     Mat magnitude = computeGradient(blurred);
@@ -101,7 +107,6 @@ Mat cannyEdgeDetection(const Mat& image, double lowThreshold, double highThresho
 
     return edges;
 }
-
 
 void houghTransform(const Mat& edgeImage, vector<pair<int, int>>& lines, int threshold = 100) {
     int width = edgeImage.cols;
@@ -137,7 +142,7 @@ void houghTransform(const Mat& edgeImage, vector<pair<int, int>>& lines, int thr
     for (int r = 0; r < accumulator.rows; ++r) {
         for (int t = 0; t < accumulator.cols; ++t) {
             if (accumulator.at<int>(r, t) >= threshold) {
-                lines.emplace_back(r - maxRho, t - 90);  // ρ, θ
+                lines.emplace_back(r - maxRho, t - 90);
             }
         }
     }
@@ -156,7 +161,7 @@ void drawHoughLines(Mat& image, const vector<pair<int, int>>& lines) {
         Point pt1(cvRound(x0 + 1000 * (-b)), cvRound(y0 + 1000 * (a)));
         Point pt2(cvRound(x0 - 1000 * (-b)), cvRound(y0 - 1000 * (a)));
 
-        line(image, pt1, pt2, Scalar(0, 0, 255), 1);
+        line(image, pt1, pt2, Scalar(0, 255, 0), 2, LINE_AA);
     }
 }
 
@@ -170,7 +175,7 @@ vector<pair<int, int>> filterSimilarLines(const vector<pair<int, int>>& lines, i
                 abs(current.second - existing.second) < thetaThresh) {
                 isDuplicate = true;
                 break;
-                }
+            }
         }
         if (!isDuplicate) {
             filtered.push_back(current);
@@ -179,9 +184,8 @@ vector<pair<int, int>> filterSimilarLines(const vector<pair<int, int>>& lines, i
     return filtered;
 }
 
-
 int main() {
-    Mat image = imread("../resources/TestImage1.jpg", IMREAD_GRAYSCALE);
+    Mat image = imread("../resources/resolution-high.jpg", IMREAD_GRAYSCALE);
 
     if (image.empty()) {
         cerr << "Eroare: Imaginea nu a putut fi încărcată.\n";
@@ -193,7 +197,7 @@ int main() {
 
     double lowThreshold = 30;
     double highThreshold = 100;
-    Mat edges = cannyEdgeDetection(blurred, lowThreshold, highThreshold);
+    Mat edges = cannyEdgeDetection(image, lowThreshold, highThreshold);
 
     vector<pair<int, int>> lines;
     houghTransform(edges, lines, 180);
