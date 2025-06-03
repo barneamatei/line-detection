@@ -264,7 +264,7 @@ vector<pair<int, int>> filterSimilarLines(const vector<pair<int, int>>& lines, i
 }
 
 int main() {
-    Mat image = imread("../resources/lines.jpg", IMREAD_GRAYSCALE);
+    Mat image = imread("../resources/horizontal-lines.jpg", IMREAD_GRAYSCALE);
     if (image.empty()) {
         cerr << "Eroare: Imaginea nu a putut fi încărcată.\n";
         return 1;
